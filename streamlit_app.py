@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import date, timedelta
 from utils import get_price_data, set_page_config
+from indicators import add_moving_average, add_52w_high_low, calculate_rsi
 
 # Set the title and favicon that appear in the Browser's tab bar.
 set_page_config()
@@ -80,15 +81,10 @@ else:
         plot_df = pivot_df.copy()
 
         if 'Moving Average (MA)' in selected_indicators and ma_period:
-            for ticker in pivot_df.columns:
-                plot_df[f'{ticker}_MA{ma_period}'] = plot_df[ticker].rolling(window=ma_period, min_periods=1).mean()
+            plot_df = add_moving_average(plot_df, ma_period)
 
         if '52w High/Low' in selected_indicators:
-            # 52 weeks ~ 252 trading days
-            win = 252
-            for ticker in pivot_df.columns:
-                plot_df[f'{ticker}_52w_high'] = plot_df[ticker].rolling(window=win, min_periods=1).max()
-                plot_df[f'{ticker}_52w_low'] = plot_df[ticker].rolling(window=win, min_periods=1).min()
+            plot_df = add_52w_high_low(plot_df)
 
         st.line_chart(plot_df)
 
@@ -123,27 +119,9 @@ else:
                     delta_color=delta_color,
                 )
 
-        # If RSI is selected, show a separate chart below. Use 14-day RSI.
+        # If RSI is selected, show a separate chart below.
         if 'RSI (14)' in selected_indicators:
-            rsi_period = 14
-            rsi_frames = {}
-            for ticker in pivot_df.columns:
-                series = pivot_df[ticker].dropna()
-                if series.empty:
-                    continue
-
-                delta = series.diff()
-                up = delta.clip(lower=0)
-                down = -1 * delta.clip(upper=0)
-                # Wilder's smoothing (EMA with alpha = 1/n)
-                ma_up = up.ewm(alpha=1/rsi_period, adjust=False).mean()
-                ma_down = down.ewm(alpha=1/rsi_period, adjust=False).mean()
-                rs = ma_up / ma_down
-                rsi = 100 - (100 / (1 + rs))
-                rsi.index = series.index
-                rsi_frames[ticker] = rsi
-
-            if rsi_frames:
-                rsi_df = pd.DataFrame(rsi_frames)
+            rsi_df = calculate_rsi(pivot_df)
+            if not rsi_df.empty:
                 st.header('RSI (14) over time', divider='gray')
                 st.line_chart(rsi_df)
