@@ -180,53 +180,158 @@ if ticker:
             "Change": (info.get('regularMarketChangePercent'), lambda x: f"{x:.2f}%" if x else "-"),
         }
         
-        # Prepare data for DataFrame
-        table_rows = []
-        current_row_data = {}
-        col_count = 0
-        
+        # Definitions for tooltips
+        metric_definitions = {
+            "P/E": "Price-to-Earnings Ratio: Share price divided by earnings per share.",
+            "EPS (ttm)": "Earnings Per Share (Trailing 12 Months).",
+            "Insider Own": "Percentage of shares held by company insiders.",
+            "Shs Outstand": "Shares Outstanding: Total shares held by all shareholders.",
+            "Perf Week": "Performance over the last week.",
+            "Market Cap": "Total value of all outstanding shares.",
+            "Forward P/E": "Projected P/E ratio for the next 12 months.",
+            "EPS next Y": "Estimated Earnings Per Share for the next year.",
+            "Insider Trans": "Recent insider buying/selling activity.",
+            "Shs Float": "Shares available for trading by the public.",
+            "Perf Month": "Performance over the last month.",
+            "Enterprise Value": "Measure of a company's total value (Market Cap + Debt - Cash).",
+            "PEG": "Price/Earnings to Growth Ratio.",
+            "EPS next Q": "Estimated Earnings Per Share for the next quarter.",
+            "Inst Own": "Percentage of shares held by institutional investors.",
+            "Short Float": "Percentage of float that is shorted.",
+            "Perf Quarter": "Performance over the last quarter.",
+            "Income": "Net Income: The company's total profit.",
+            "P/S": "Price-to-Sales Ratio.",
+            "EPS this Y": "Earnings Per Share estimate for the current year.",
+            "Inst Trans": "Recent institutional buying/selling activity.",
+            "Short Ratio": "Days to Cover: Number of days to close out short positions.",
+            "Perf Half Y": "Performance over the last 6 months.",
+            "Sales": "Total Revenue.",
+            "P/B": "Price-to-Book Ratio.",
+            "ROA": "Return on Assets.",
+            "Short Interest": "Total number of shares sold short.",
+            "Perf YTD": "Performance Year-to-Date.",
+            "Book/sh": "Book Value per Share.",
+            "P/C": "Price-to-Cash Ratio.",
+            "ROE": "Return on Equity.",
+            "52W High": "Highest price in the last 52 weeks.",
+            "Perf Year": "Performance over the last year.",
+            "Cash/sh": "Total Cash per Share.",
+            "P/FCF": "Price-to-Free-Cash-Flow.",
+            "ROIC": "Return on Invested Capital.",
+            "52W Low": "Lowest price in the last 52 weeks.",
+            "Perf 3Y": "Performance over the last 3 years.",
+            "Dividend Est.": "Estimated Annual Dividend.",
+            "EV/EBITDA": "Enterprise Value to EBITDA.",
+            "Gross Margin": "Gross Profit as a percentage of Revenue.",
+            "Perf 5Y": "Performance over the last 5 years.",
+            "Dividend TTM": "Trailing 12 Months Dividend.",
+            "EV/Sales": "Enterprise Value to Sales.",
+            "Oper. Margin": "Operating Margin: Operating income divided by revenue.",
+            "ATR (14)": "Average True Range (volatility measure).",
+            "Perf 10Y": "Performance over the last 10 years.",
+            "Quick Ratio": "Measure of company's ability to meet short-term obligations.",
+            "Profit Margin": "Net Income divided by Revenue.",
+            "RSI (14)": "Relative Strength Index (momentum oscillator).",
+            "Recom": "Analyst Recommendation Rating (1=Strong Buy, 5=Sell).",
+            "Current Ratio": "Current Assets divided by Current Liabilities.",
+            "SMA20": "Distance from 20-Day Simple Moving Average.",
+            "Beta": "Measure of volatility relative to the market.",
+            "Target Price": "Average Analyst Target Price.",
+            "Debt/Eq": "Debt-to-Equity Ratio.",
+            "SMA50": "Distance from 50-Day Simple Moving Average.",
+            "Rel Volume": "Relative Volume: Current volume compared to average.",
+            "Prev Close": "Previous trading session's closing price.",
+            "Employees": "Number of full-time employees.",
+            "SMA200": "Distance from 200-Day Simple Moving Average.",
+            "Avg Volume": "Average Daily Trading Volume.",
+            "Price": "Current Stock Price.",
+            "Volume": "Current Trading Volume.",
+            "Change": "Percentage change from previous close.",
+            "Index": "Market index membership."
+        }
+
+        # Generate HTML Table
+        html_table = """
+        <style>
+            table.stats-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-family: sans-serif;
+                font-size: 0.6em;
+            }
+            table.stats-table td {
+                border: 1px solid #555;
+                padding: 8px;
+            }
+            .metric-label {
+                cursor: help;
+                font-weight: 500;
+                position: relative; /* Anchor for tooltip */
+            }
+            /* Custom CSS Tooltip */
+            .metric-label:hover::after {
+                content: attr(data-tooltip);
+                position: absolute;
+                bottom: 100%;
+                left: 50%;
+                transform: translateX(-50%);
+                background-color: #333;
+                color: #fff;
+                padding: 6px 10px;
+                border-radius: 5px;
+                font-size: 0.85rem;
+                white-space: normal;
+                max-width: 250px;
+                width: max-content;
+                z-index: 9999;
+                box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+                text-align: center;
+                border: 1px solid #666;
+            }
+            .metric-value {
+                color: #FFD700;
+                font-weight: bold;
+            }
+        </style>
+        <table class="stats-table">
+        """
+
         items = list(data_grid.items())
+        total_items = len(items)
+        cols_per_row = 3 # Pairs of (Metric, Value)
         
-        for label, (val, fmt) in items:
-            try:
-                display_val = fmt(val) if val is not None else "-"
-            except Exception:
-                display_val = "-"
+        for i in range(0, total_items, cols_per_row):
+            html_table += "<tr>"
+            chunk = items[i : i + cols_per_row]
             
-            current_row_data[f"Metric {col_count // 2 + 1}"] = label
-            current_row_data[f"Value {col_count // 2 + 1}"] = display_val
+            # Ensure we always have 3 pairs per row for alignment, filling with empty if needed
+            while len(chunk) < cols_per_row:
+                chunk.append(("", (None, str)))
+
+            for label, (val, fmt) in chunk:
+                if label:
+                    try:
+                        display_val = fmt(val) if val is not None else "-"
+                    except:
+                        display_val = "-"
+                    
+                    definition = metric_definitions.get(label, "")
+                    # Escape quotes in definition to prevent HTML breaking
+                    definition = definition.replace('"', '&quot;')
+                    tooltip_attr = f'data-tooltip="{definition}"' if definition else ""
+                    
+                    html_table += f'<td class="metric-label" {tooltip_attr}>{label}</td>'
+                    html_table += f'<td class="metric-value">{display_val}</td>'
+                else:
+                    # Empty filler cells
+                    html_table += "<td></td><td></td>"
             
-            col_count += 2 # Each pair (Metric, Value) counts as two columns in the conceptual table
-            
-            if col_count >= 6: # After 3 pairs (6 columns), start a new row
-                table_rows.append(current_row_data)
-                current_row_data = {}
-                col_count = 0
+            html_table += "</tr>"
         
-        # Add any remaining data as a partial row
-        if current_row_data:
-            # Fill remaining columns with empty strings to maintain structure for st.dataframe
-            while col_count < 6:
-                current_row_data[f"Metric {col_count // 2 + 1}"] = ""
-                current_row_data[f"Value {col_count // 2 + 1}"] = ""
-                col_count += 2
-            table_rows.append(current_row_data)
+        html_table += "</table>"
+        
+        st.markdown(html_table, unsafe_allow_html=True)
 
-        if table_rows:
-            df_stats = pd.DataFrame(table_rows)
-            
-            def highlight_cols(s):
-                styles = []
-                for col_name in s.index:
-                    if col_name.startswith('Value'):
-                        styles.append('color: #FFD700') # Golden color for value text
-                    else:
-                        styles.append('') # Default (no specific styling)
-                return styles
-
-            st.dataframe(df_stats.style.apply(highlight_cols, axis=1), use_container_width=True, hide_index=True)
-        else:
-            st.info("No statistics available for this ticker.")
 
         # Show raw data expander
         with st.expander("Raw Data (JSON)"):
