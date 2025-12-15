@@ -1,11 +1,15 @@
 import streamlit as st
 import pandas as pd
 from datetime import date, timedelta
+import sys
 from utils import get_price_data, set_page_config
 from indicators import add_moving_average, add_52w_high_low, calculate_rsi
 from news import get_news
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+
+# Check for debug flag
+DEBUG = '--debug' in sys.argv
 
 # Set the title and favicon that appear in the Browser's tab bar.
 set_page_config()
@@ -34,7 +38,7 @@ available_tickers = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'META', 'NVDA']
 selected_tickers = st.multiselect(
     'Which tickers would you like to view?',
     available_tickers,
-    ['AAPL', 'MSFT', 'GOOGL', 'AMZN']
+    ['NVDA', 'AMZN']
 )
 
 # Allow the user to add custom tickers as a comma-separated list
@@ -80,6 +84,8 @@ else:
 
         st.header('Prices over time', divider='gray')
 
+        log_scale = st.checkbox('Log Scale', value=False)
+
         # Create a subplot figure with 2 rows if RSI is selected
         rows = 2 if 'RSI (14)' in selected_indicators else 1
         row_heights = [0.7, 0.3] if 'RSI (14)' in selected_indicators else [1]
@@ -107,7 +113,13 @@ else:
                 fig.update_yaxes(title_text="RSI", row=2, col=1)
 
 
-        fig.update_layout(height=500, title_text="Stock Prices")
+        fig.update_layout(
+            height=500,
+            title_text="Stock Prices"
+        )
+        
+        if log_scale:
+            fig.update_yaxes(type='log', row=1, col=1)
         st.plotly_chart(fig, use_container_width=True)
 
         st.header(f'Prices at end of range ({end_date.isoformat()})', divider='gray')
@@ -142,12 +154,16 @@ else:
                 )
 
         st.header('News Headlines', divider='gray')
-        
+
         news_ticker = st.selectbox('Select ticker for news', final_tickers)
+        if DEBUG:
+            st.write(f"Selected ticker for news: {news_ticker}")
 
         if st.button('Get News'):
             if news_ticker:
                 news = get_news(news_ticker)
+                if DEBUG:
+                    st.write("Fetched news data:", news)
                 if news:
                     for article in news:
                         st.markdown(f"**{article['headline']}** ({article['publisher']})")
