@@ -44,6 +44,7 @@ contribution_freq = st.sidebar.selectbox("Contribution Frequency", ["None", "Mon
 # Model Selection
 backend = simulation_lib.SimulationBackend()
 model_name = st.sidebar.selectbox("Prediction Model", list(backend.models.keys()))
+uncertainty_pct = st.sidebar.number_input("Uncertainty Band (%)", min_value=1.0, max_value=99.0, value=95.0, step=1.0)
 
 # Run Button
 if st.sidebar.button("Run Simulation"):
@@ -104,7 +105,7 @@ if st.sidebar.button("Run Simulation"):
                 # So let's always generate the full 3-month range for prediction
                 full_future_dates = pd.date_range(start=end_date + timedelta(days=1), end=prediction_end_date, freq='B').to_pydatetime().tolist()
                 
-                pred_prices, lower, upper = model.predict(full_future_dates)
+                pred_prices, lower, upper = model.predict(full_future_dates, confidence_interval=uncertainty_pct/100.0)
                 
                 df_pred = pd.DataFrame({
                     'Date': full_future_dates,
@@ -114,11 +115,19 @@ if st.sidebar.button("Run Simulation"):
                 })
 
                 # 5. Wallet Simulation
-                # Run on the whole available history (Train + Test) to show user their journey
-                df_history_combined = pd.concat([df_train, df_test]).sort_values('Date').drop_duplicates('Date')
-                
                 wallet = simulation_lib.Wallet(initial_investment, contribution_amount, contribution_freq)
-                wallet_res = wallet.simulate_portfolio(df_history_combined)
+                
+                # A. Actual Scenario (Historical + Actual Future)
+                df_history_combined = pd.concat([df_train, df_test]).sort_values('Date').drop_duplicates('Date')
+                wallet_res_actual = wallet.simulate_portfolio(df_history_combined)
+                
+                # B. Predicted Scenario (Historical + Predicted Future)
+                # Prepare predicted data
+                df_pred_renamed = df_pred[['Date', 'Predicted']].rename(columns={'Predicted': 'Price'})
+                # Ensure we don't have duplicates at the join boundary. 
+                # df_train ends at end_date. df_pred starts at end_date + 1 day.
+                df_scenario_predicted = pd.concat([df_train[['Date', 'Price']], df_pred_renamed]).sort_values('Date').reset_index(drop=True)
+                wallet_res_predicted = wallet.simulate_portfolio(df_scenario_predicted)
                 
                 # --- Visualization ---
                 
@@ -154,7 +163,7 @@ if st.sidebar.button("Run Simulation"):
                     fill='toself',
                     fillcolor='rgba(255, 165, 0, 0.2)',
                     line=dict(color='rgba(255,255,255,0)'),
-                    name='Uncertainty (95%)'
+                    name=f'Uncertainty ({uncertainty_pct:.0f}%)'
                 ))
                 
                 fig_price.update_layout(title=f"{ticker} Price Simulation", xaxis_title="Date", yaxis_title="Price ($)")
@@ -163,28 +172,59 @@ if st.sidebar.button("Run Simulation"):
                 # Chart 2: Wallet Value
                 st.subheader("Portfolio Performance")
                 
-                # Metrics
-                final_val = wallet_res['Portfolio Value'].iloc[-1]
-                total_inv = wallet_res['Invested Capital'].iloc[-1]
-                profit = final_val - total_inv
-                roi = (profit / total_inv * 100) if total_inv > 0 else 0
+                # Calculate Metrics at the "Current Date" (Last available Actual date)
+                comparison_date = df_history_combined['Date'].max()
                 
-                col1, col2, col3 = st.columns(3)
-                col1.metric("Final Portfolio Value", f"${final_val:,.2f}")
-                col2.metric("Total Invested", f"${total_inv:,.2f}")
-                col3.metric("Total Profit/Loss", f"${profit:,.2f}", f"{roi:.2f}%")
+                # Metric Helper
+                def get_metrics_at_date(wallet_df, target_date):
+                    # Find row nearest to target_date (<=)
+                    # Use last row if target_date is beyond simulation (shouldn't happen for Actual, maybe for Predicted if partial)
+                    filtered = wallet_df[wallet_df['Date'] <= target_date]
+                    if filtered.empty:
+                        return 0, 0, 0, 0
+                    row = filtered.iloc[-1]
+                    val = row['Portfolio Value']
+                    inv = row['Invested Capital']
+                    prof = val - inv
+                    roi = (prof / inv * 100) if inv > 0 else 0
+                    return val, inv, prof, roi
+
+                val_act, inv_act, prof_act, roi_act = get_metrics_at_date(wallet_res_actual, comparison_date)
+                val_pred, inv_pred, prof_pred, roi_pred = get_metrics_at_date(wallet_res_predicted, comparison_date)
                 
+                st.markdown(f"**Performance as of {comparison_date.date()}**")
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("### Actual")
+                    st.metric("Portfolio Value", f"${val_act:,.2f}")
+                    st.metric("Total Invested", f"${inv_act:,.2f}")
+                    st.metric("Total Profit/Loss", f"${prof_act:,.2f}", f"{roi_act:.2f}%")
+                    
+                with col2:
+                    st.markdown("### Predicted (Scenario)")
+                    st.metric("Portfolio Value", f"${val_pred:,.2f}", delta=f"${val_pred - val_act:,.2f}")
+                    st.metric("Total Invested", f"${inv_pred:,.2f}")
+                    st.metric("Total Profit/Loss", f"${prof_pred:,.2f}", f"{roi_pred:.2f}%")
+
                 fig_wallet = go.Figure()
                 
                 fig_wallet.add_trace(go.Scatter(
-                    x=wallet_res['Date'], y=wallet_res['Portfolio Value'],
-                    mode='lines', name='Portfolio Value',
+                    x=wallet_res_actual['Date'], y=wallet_res_actual['Portfolio Value'],
+                    mode='lines', name='Actual Portfolio Value',
                     fill='tozeroy',
                     line=dict(color='purple')
                 ))
                 
                 fig_wallet.add_trace(go.Scatter(
-                    x=wallet_res['Date'], y=wallet_res['Invested Capital'],
+                    x=wallet_res_predicted['Date'], y=wallet_res_predicted['Portfolio Value'],
+                    mode='lines', name='Predicted Portfolio Value',
+                    line=dict(color='orange', dash='dash')
+                ))
+                
+                fig_wallet.add_trace(go.Scatter(
+                    x=wallet_res_actual['Date'], y=wallet_res_actual['Invested Capital'],
                     mode='lines', name='Invested Capital',
                     line=dict(color='gray', dash='dot')
                 ))

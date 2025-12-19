@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 import pandas as pd
 import numpy as np
 from sklearn.linear_model import LinearRegression
+from scipy.stats import norm
 from datetime import datetime, timedelta
 import dateutil.relativedelta
 
@@ -98,9 +99,10 @@ class PredictionModel(ABC):
         pass
 
     @abstractmethod
-    def predict(self, future_dates):
+    def predict(self, future_dates, confidence_interval=0.95):
         """
         future_dates: array-like of datetime objects
+        confidence_interval: float between 0 and 1
         Returns: (predictions, lower_bound, upper_bound)
         """
         pass
@@ -120,13 +122,16 @@ class LinearRegressionPredictor(PredictionModel):
         residuals = prices - predictions
         self.std_dev = np.std(residuals)
 
-    def predict(self, future_dates):
+    def predict(self, future_dates, confidence_interval=0.95):
         dates_ord = np.array([d.toordinal() for d in future_dates]).reshape(-1, 1)
         predictions = self.model.predict(dates_ord)
         
-        # Simple uncertainty: +/- 2 std devs (approx 95% CI)
-        lower_bound = predictions - (2 * self.std_dev)
-        upper_bound = predictions + (2 * self.std_dev)
+        # Calculate Z-score based on confidence interval
+        # e.g., 95% -> 0.975 quantile -> ~1.96
+        z_score = norm.ppf((1 + confidence_interval) / 2)
+        
+        lower_bound = predictions - (z_score * self.std_dev)
+        upper_bound = predictions + (z_score * self.std_dev)
         
         return predictions, lower_bound, upper_bound
 
