@@ -155,7 +155,7 @@ else:
         
         if log_scale:
             fig.update_yaxes(type='log', row=1, col=1)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
 
         st.header(f'Prices at end of range ({end_date.isoformat()})', divider='gray')
 

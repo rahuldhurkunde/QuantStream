@@ -167,7 +167,7 @@ if st.sidebar.button("Run Simulation"):
                 ))
                 
                 fig_price.update_layout(title=f"{ticker} Price Simulation", xaxis_title="Date", yaxis_title="Price ($)")
-                st.plotly_chart(fig_price, use_container_width=True)
+                st.plotly_chart(fig_price, width='stretch')
                 
                 # Chart 2: Wallet Value
                 st.subheader("Portfolio Performance")
@@ -230,4 +230,4 @@ if st.sidebar.button("Run Simulation"):
                 ))
                 
                 fig_wallet.update_layout(title="Wallet Growth Over Time", xaxis_title="Date", yaxis_title="Value ($)")
-                st.plotly_chart(fig_wallet, use_container_width=True)
+                st.plotly_chart(fig_wallet, width='stretch')

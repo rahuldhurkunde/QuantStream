@@ -89,7 +89,7 @@ if ticker:
             yaxis_title="Price",
             template="plotly_white"
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
 
         # 4. Summary Statistics Table
         st.subheader("Fundamental & Technical Statistics")
