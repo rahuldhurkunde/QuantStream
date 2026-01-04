@@ -11,7 +11,7 @@ st.set_page_config(page_title="Backtesting", page_icon="📈")
 st.title("Stock Backtesting")
 
 st.markdown("""
-#This tool allows you to backtest stock performance and prediction models.
+### This tool allows you to backtest stock performance and prediction models.
 
 1. Select a Ticker and a backtesting Time Period (Start -> End).
 2. Select a Prediction Date (must be after the backtest end).

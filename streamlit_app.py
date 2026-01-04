@@ -45,8 +45,8 @@ selected_tickers = st.multiselect(
 )
 
 # Allow the user to add custom tickers as a comma-separated list
-custom_input = st.text_input('Add custom tickers (comma-separated)', '', help='Enter tickers like AAPL, TSLA, BABA')
-custom_list = [t.strip().upper() for t in custom_input.split(',') if t.strip()]
+# custom_input = st.text_input('Add custom tickers (comma-separated)', '', help='Enter tickers like AAPL, TSLA, BABA')
+# custom_list = [t.strip().upper() for t in custom_input.split(',') if t.strip()]
 
 # Merge selected tickers with custom tickers, preserving order and removing duplicates
 final_tickers = []
@@ -54,7 +54,7 @@ final_tickers = []
 # Process selected list (extract symbols)
 cleaned_selected = [extract_ticker(t) for t in (selected_tickers or [])]
 
-for t in cleaned_selected + custom_list:
+for t in cleaned_selected:
     if t and t not in final_tickers:
         final_tickers.append(t)
 
