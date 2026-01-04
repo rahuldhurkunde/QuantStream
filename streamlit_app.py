@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import date, timedelta
 import sys
-from utils import get_price_data, set_page_config
+from utils import get_price_data, set_page_config, POPULAR_TICKERS_LIST, extract_ticker
 from indicators import add_moving_average, add_52w_high_low, calculate_rsi
 from news import get_news
 import plotly.graph_objects as go
@@ -38,12 +38,10 @@ start_date, end_date = st.date_input(
 )
 
 # Offer a set of common tickers by default
-available_tickers = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'META', 'NVDA']
-
 selected_tickers = st.multiselect(
     'Which tickers would you like to view?',
-    available_tickers,
-    ['NVDA', 'AMZN']
+    POPULAR_TICKERS_LIST,
+    ['Nvidia Corp (NVDA)', 'Amazon Com Inc (AMZN)']
 )
 
 # Allow the user to add custom tickers as a comma-separated list
@@ -52,7 +50,11 @@ custom_list = [t.strip().upper() for t in custom_input.split(',') if t.strip()]
 
 # Merge selected tickers with custom tickers, preserving order and removing duplicates
 final_tickers = []
-for t in (selected_tickers or []) + custom_list:
+
+# Process selected list (extract symbols)
+cleaned_selected = [extract_ticker(t) for t in (selected_tickers or [])]
+
+for t in cleaned_selected + custom_list:
     if t and t not in final_tickers:
         final_tickers.append(t)
 

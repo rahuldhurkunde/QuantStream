@@ -23,7 +23,18 @@ st.markdown("""
 st.sidebar.header("Configuration")
 
 # Ticker Input
-ticker = st.sidebar.text_input("Ticker Symbol", value="NVDA").upper()
+# Use selectbox for easy search, plus an option for custom entry
+ticker_selection = st.sidebar.selectbox(
+    "Select Ticker",
+    utils.POPULAR_TICKERS_LIST + ["Other..."],
+    index=0  # Default to Nvidia (NVDA) which is usually first or near top
+)
+
+if ticker_selection == "Other...":
+    ticker_input = st.sidebar.text_input("Enter Custom Ticker", value="NVDA").upper()
+    ticker = utils.extract_ticker(ticker_input)
+else:
+    ticker = utils.extract_ticker(ticker_selection)
 
 # Date Inputs
 today = date.today()

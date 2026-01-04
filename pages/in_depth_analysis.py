@@ -9,7 +9,7 @@ from datetime import datetime
 # Add the parent directory to sys.path so we can import utils
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from utils import set_page_config
+from utils import set_page_config, POPULAR_TICKERS_LIST, extract_ticker
 from indicators import calculate_rsi
 
 # Set the page config
@@ -41,7 +41,22 @@ def get_change(current, old):
 st.markdown("# :microscope: In-depth Analysis")
 
 # 1. Ticker Input
-ticker = st.text_input("Enter Ticker Symbol", value="NVDA").strip().upper()
+# Use selectbox for easy search, plus an option for custom entry
+col_sel, col_cust = st.columns([2, 1])
+
+with col_sel:
+    ticker_selection = st.selectbox(
+        "Select Ticker",
+        POPULAR_TICKERS_LIST + ["Other..."],
+        index=0
+    )
+
+if ticker_selection == "Other...":
+    with col_cust:
+        ticker_input = st.text_input("Enter Custom Ticker", value="NVDA").strip().upper()
+    ticker = extract_ticker(ticker_input)
+else:
+    ticker = extract_ticker(ticker_selection)
 
 if ticker:
     stock = yf.Ticker(ticker)
