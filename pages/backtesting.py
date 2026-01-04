@@ -1,23 +1,22 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 from datetime import datetime, timedelta, date
 from dateutil.relativedelta import relativedelta
 import simulation_lib
 import utils
 
-st.set_page_config(page_title="Stock Simulation", page_icon="📈")
+st.set_page_config(page_title="Backtesting", page_icon="📈")
 
-st.title("Stock Price Simulation & Backtesting")
+st.title("Stock Backtesting")
 
 st.markdown("""
-This tool allows you to simulate a stock's performance and test prediction models.
-1. Select a Ticker and a simulation Time Period (Start -> End).
-2. Select a Prediction Date (must be after the simulation end).
-3. The model trains on data from **Start to End**.
-4. It predicts prices from **End to Prediction Date**.
-5. We also simulate a Wallet's growth over the entire period.
+#This tool allows you to backtest stock performance and prediction models.
+
+1. Select a Ticker and a backtesting Time Period (Start -> End).
+2. Select a Prediction Date (must be after the backtest end).
+3. The model trains on data from **Start to End** only.
+4. We also simulate a Portfolio's growth over the entire period.
 """)
 
 # --- Sidebar Inputs ---
@@ -32,7 +31,7 @@ default_start = today - relativedelta(years=2)
 default_end = today - relativedelta(months=3) # Default to 3 months ago to show comparison
 
 start_date = st.sidebar.date_input("Start Date", value=default_start)
-end_date = st.sidebar.date_input("End Date (Simulation Cut-off)", value=default_end)
+end_date = st.sidebar.date_input("End Date (Backtest Cut-off)", value=default_end)
 
 default_prediction = end_date + relativedelta(months=3)
 prediction_date = st.sidebar.date_input("Prediction Date", value=default_prediction, min_value=end_date + timedelta(days=1))
@@ -46,8 +45,8 @@ if end_date >= prediction_date:
     st.sidebar.error("End Date must be before Prediction Date.")
     dates_valid = False
 
-# Wallet Inputs
-st.sidebar.subheader("Wallet Settings")
+# Portfolio Inputs
+st.sidebar.subheader("Portfolio Settings")
 initial_investment = st.sidebar.number_input("Initial Investment ($)", value=10000.0, step=1000.0)
 contribution_amount = st.sidebar.number_input("Regular Contribution ($)", value=0.0, step=100.0)
 contribution_freq = st.sidebar.selectbox("Contribution Frequency", ["None", "Monthly", "Quarterly", "Annually"])
@@ -58,11 +57,11 @@ model_name = st.sidebar.selectbox("Prediction Model", list(backend.models.keys()
 uncertainty_pct = st.sidebar.number_input("Uncertainty Band (%)", min_value=1.0, max_value=99.0, value=95.0, step=1.0)
 
 # Run Button
-if st.sidebar.button("Run Simulation"):
+if st.sidebar.button("Run Backtest"):
     if not dates_valid:
-        st.error("Please fix the date errors in the sidebar before running the simulation.")
+        st.error("Please fix the date errors in the sidebar before running the backtest.")
     else:
-        with st.spinner("Fetching data and running simulation..."):
+        with st.spinner("Fetching data and running backtest..."):
             # 1. Determine Date Ranges
             # Comparison period: End -> Prediction Date
             # We need data up to Prediction Date (or today, whichever is earlier/later)
@@ -78,19 +77,11 @@ if st.sidebar.button("Run Simulation"):
             
             df_all = utils.get_price_data([ticker], start_date, fetch_end_date + timedelta(days=5))
             
-            # Fetch S&P 500 data for comparison
-            sp500_ticker = "^GSPC"
-            df_sp500 = utils.get_price_data([sp500_ticker], start_date, fetch_end_date + timedelta(days=5))
-            
             if df_all.empty:
                 st.error(f"No data found for {ticker} in the given range.")
             else:
                 # Ensure Date is datetime for pandas ops (utils returns date objects usually, let's standardize)
                 df_all['Date'] = pd.to_datetime(df_all['Date'])
-                if not df_sp500.empty:
-                    df_sp500['Date'] = pd.to_datetime(df_sp500['Date'])
-                    # Filter S&P 500 data to match the simulation range (Start -> Predicted Date)
-                    df_sp500 = df_sp500[df_sp500['Date'] <= pd.to_datetime(fetch_end_date)]
                 
                 # 2. Split Data
                 # Training: <= End Date
@@ -136,12 +127,12 @@ if st.sidebar.button("Run Simulation"):
                         'Upper': upper
                     })
 
-                    # 5. Wallet Simulation
-                    wallet = simulation_lib.Wallet(initial_investment, contribution_amount, contribution_freq)
+                    # 5. Portfolio Simulation
+                    portfolio = simulation_lib.Wallet(initial_investment, contribution_amount, contribution_freq)
                     
                     # A. Actual Scenario (Historical + Actual Future)
                     df_history_combined = pd.concat([df_train, df_test]).sort_values('Date').drop_duplicates('Date')
-                    wallet_res_actual = wallet.simulate_portfolio(df_history_combined)
+                    portfolio_res_actual = portfolio.simulate_portfolio(df_history_combined)
                     
                     # B. Predicted Scenario (Historical + Predicted Future)
                     # Prepare predicted data
@@ -149,22 +140,19 @@ if st.sidebar.button("Run Simulation"):
                     # Ensure we don't have duplicates at the join boundary. 
                     # df_train ends at end_date. df_pred starts at end_date + 1 day.
                     df_scenario_predicted = pd.concat([df_train[['Date', 'Price']], df_pred_renamed]).sort_values('Date').reset_index(drop=True)
-                    wallet_res_predicted = wallet.simulate_portfolio(df_scenario_predicted)
+                    portfolio_res_predicted = portfolio.simulate_portfolio(df_scenario_predicted)
                     
                     # --- Visualization ---
                     
-                    # Chart 1: Price vs Prediction (with S&P 500 subplot)
-                    fig_price = make_subplots(rows=2, cols=1, shared_xaxes=True, 
-                                              vertical_spacing=0.1, 
-                                              subplot_titles=(f"{ticker} Price Simulation", "S&P 500 Index"),
-                                              row_heights=[0.7, 0.3])
+                    # Chart 1: Price vs Prediction
+                    fig_price = go.Figure()
                     
                     # Historical
                     fig_price.add_trace(go.Scatter(
                         x=df_train['Date'], y=df_train['Price'],
                         mode='lines', name='Historical Price',
                         line=dict(color='blue')
-                    ), row=1, col=1)
+                    ))
                     
                     # Actual Future (if exists)
                     if not df_test.empty:
@@ -172,14 +160,14 @@ if st.sidebar.button("Run Simulation"):
                             x=df_test['Date'], y=df_test['Price'],
                             mode='lines', name='Actual Future Price',
                             line=dict(color='green')
-                        ), row=1, col=1)
+                        ))
                     
                     # Prediction
                     fig_price.add_trace(go.Scatter(
                         x=df_pred['Date'], y=df_pred['Predicted'],
                         mode='lines', name='Predicted Price',
                         line=dict(color='orange', dash='dash')
-                    ), row=1, col=1)
+                    ))
                     
                     # Uncertainty Bands
                     fig_price.add_trace(go.Scatter(
@@ -189,20 +177,14 @@ if st.sidebar.button("Run Simulation"):
                         fillcolor='rgba(255, 165, 0, 0.2)',
                         line=dict(color='rgba(255,255,255,0)'),
                         name=f'Uncertainty ({uncertainty_pct:.0f}%)'
-                    ), row=1, col=1)
+                    ))
                     
-                    # S&P 500 Trace
-                    if not df_sp500.empty:
-                        fig_price.add_trace(go.Scatter(
-                            x=df_sp500['Date'], y=df_sp500['Price'],
-                            mode='lines', name='S&P 500',
-                            line=dict(color='gray')
-                        ), row=2, col=1)
-                    
-                    fig_price.update_layout(height=600, xaxis_title="Date", yaxis_title="Price ($)")
-                    # Update y-axis titles for subplots
-                    fig_price.update_yaxes(title_text="Price ($)", row=1, col=1)
-                    fig_price.update_yaxes(title_text="Index Value", row=2, col=1)
+                    fig_price.update_layout(
+                        title=f"{ticker} Performance", 
+                        xaxis_title="Date",
+                        yaxis_title=f"{ticker} Price ($)",
+                        height=600
+                    )
                     
                     st.plotly_chart(fig_price, width='stretch')
                     
@@ -213,10 +195,10 @@ if st.sidebar.button("Run Simulation"):
                     comparison_date = df_history_combined['Date'].max()
                     
                     # Metric Helper
-                    def get_metrics_at_date(wallet_df, target_date):
+                    def get_metrics_at_date(portfolio_df, target_date):
                         # Find row nearest to target_date (<=)
                         # Use last row if target_date is beyond simulation (shouldn't happen for Actual, maybe for Predicted if partial)
-                        filtered = wallet_df[wallet_df['Date'] <= target_date]
+                        filtered = portfolio_df[portfolio_df['Date'] <= target_date]
                         if filtered.empty:
                             return 0, 0, 0, 0
                         row = filtered.iloc[-1]
@@ -226,45 +208,52 @@ if st.sidebar.button("Run Simulation"):
                         roi = (prof / inv * 100) if inv > 0 else 0
                         return val, inv, prof, roi
 
-                    val_act, inv_act, prof_act, roi_act = get_metrics_at_date(wallet_res_actual, comparison_date)
-                    val_pred, inv_pred, prof_pred, roi_pred = get_metrics_at_date(wallet_res_predicted, comparison_date)
-                    
+                    val_act, inv_act, prof_act, roi_act = get_metrics_at_date(portfolio_res_actual, comparison_date)
+                    val_pred, inv_pred, prof_pred, roi_pred = get_metrics_at_date(portfolio_res_predicted, comparison_date)
+ 
+                    # Get value at simulation End Date for delta calculation
+                    val_at_end, _, _, _ = get_metrics_at_date(portfolio_res_actual, pd.to_datetime(end_date))
+
+                    # Helper for delta formatting to ensure correct color (Streamlit needs minus sign at start)
+                    def format_delta(val):
+                        return f"-${abs(val):,.2f}" if val < 0 else f"${val:,.2f}"
+
                     st.markdown(f"**Performance as of {comparison_date.date()}**")
                     
                     col1, col2 = st.columns(2)
                     
                     with col1:
                         st.markdown("### Actual")
-                        st.metric("Portfolio Value", f"${val_act:,.2f}")
                         st.metric("Total Invested", f"${inv_act:,.2f}")
-                        st.metric("Total Profit/Loss", f"${prof_act:,.2f}", f"{roi_act:.2f}%")
+                        st.metric("Portfolio Value", f"${val_act:,.2f}")
+                        st.metric("Total Profit/Loss", f"${prof_act:,.2f}")
                         
                     with col2:
                         st.markdown("### Predicted (Scenario)")
-                        st.metric("Portfolio Value", f"${val_pred:,.2f}", delta=f"${val_pred - val_act:,.2f}")
                         st.metric("Total Invested", f"${inv_pred:,.2f}")
-                        st.metric("Total Profit/Loss", f"${prof_pred:,.2f}", f"{roi_pred:.2f}%")
+                        st.metric("Portfolio Value", f"${val_pred:,.2f}", delta=format_delta(val_pred - val_act))
+                        st.metric("Total Profit/Loss", f"${prof_pred:,.2f}")
 
-                    fig_wallet = go.Figure()
+                    fig_portfolio = go.Figure()
                     
-                    fig_wallet.add_trace(go.Scatter(
-                        x=wallet_res_actual['Date'], y=wallet_res_actual['Portfolio Value'],
+                    fig_portfolio.add_trace(go.Scatter(
+                        x=portfolio_res_actual['Date'], y=portfolio_res_actual['Portfolio Value'],
                         mode='lines', name='Actual Portfolio Value',
                         fill='tozeroy',
                         line=dict(color='purple')
                     ))
                     
-                    fig_wallet.add_trace(go.Scatter(
-                        x=wallet_res_predicted['Date'], y=wallet_res_predicted['Portfolio Value'],
+                    fig_portfolio.add_trace(go.Scatter(
+                        x=portfolio_res_predicted['Date'], y=portfolio_res_predicted['Portfolio Value'],
                         mode='lines', name='Predicted Portfolio Value',
                         line=dict(color='orange', dash='dash')
                     ))
                     
-                    fig_wallet.add_trace(go.Scatter(
-                        x=wallet_res_actual['Date'], y=wallet_res_actual['Invested Capital'],
+                    fig_portfolio.add_trace(go.Scatter(
+                        x=portfolio_res_actual['Date'], y=portfolio_res_actual['Invested Capital'],
                         mode='lines', name='Invested Capital',
                         line=dict(color='gray', dash='dot')
                     ))
                     
-                    fig_wallet.update_layout(title="Wallet Growth Over Time", xaxis_title="Date", yaxis_title="Value ($)")
-                    st.plotly_chart(fig_wallet, width='stretch')
+                    fig_portfolio.update_layout(title="Portfolio Growth Over Time", xaxis_title="Date", yaxis_title="Value ($)")
+                    st.plotly_chart(fig_portfolio, width='stretch')

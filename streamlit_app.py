@@ -18,12 +18,15 @@ set_page_config()
 # Draw the actual page (stock prices)
 
 st.markdown("""
-# :chart_with_upwards_trend: Stock Prices dashboard
+# :chart_with_upwards_trend: QuantStream
 
-Browse historical stock prices using `yfinance`.
+### _Light-weight financial dashboard built for the modern investor who demands speed and clarity_.  
+
+Browse historical stock prices using the `yfinance` API.
 """)
 
-st.page_link("pages/in_depth_analysis.py", label="Go to In-depth Analysis", icon="🔬")
+#In case we want links to sub-pages on the main one. Use below
+#st.page_link("pages/in_depth_analysis.py", label="Go to In-depth Analysis", icon="🔬")
 
 # date range selectors
 today = date.today()

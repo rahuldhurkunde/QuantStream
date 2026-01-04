@@ -56,3 +56,36 @@ def test_linear_regression_predictor():
     # Std dev should be 0 for perfect line
     assert model.std_dev < 1e-5
 
+def test_path_shadow_predictor():
+    from simulation_lib import PathShadowPredictor
+    
+    # Create sine wave data: 2 cycles of period 50
+    # x goes from 0 to 100
+    x = np.linspace(0, 4 * np.pi, 100)
+    prices = np.sin(x) + 10  # Shift up to avoid negative prices
+    dates = [datetime(2023, 1, 1) + timedelta(days=i) for i in range(100)]
+    
+    # Model with lookback 20 (approx 1/2 period?)
+    # 2pi approx 6.28. 100 points = 4pi. 
+    # Period is 50 points.
+    model = PathShadowPredictor(lookback_window=20, n_neighbors=5)
+    model.train(dates, prices)
+    
+    # Predict next 10 days
+    future_dates = [dates[-1] + timedelta(days=i) for i in range(1, 11)]
+    preds, low, high = model.predict(future_dates)
+    
+    assert len(preds) == 10
+    assert len(low) == 10
+    assert len(high) == 10
+    
+    # Check consistency
+    assert np.all(low <= preds)
+    assert np.all(preds <= high)
+    
+    # Since it's a sine wave, the prediction should continue the wave.
+    # Last point was 4pi -> sin(4pi) = 0.
+    # Next points should be increasing (sin(x) starts new cycle).
+    # We just check if it's not returning constant zero or huge numbers.
+    assert np.all(preds > 8) and np.all(preds < 12)
+

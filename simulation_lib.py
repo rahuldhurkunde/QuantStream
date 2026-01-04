@@ -135,11 +135,94 @@ class LinearRegressionPredictor(PredictionModel):
         
         return predictions, lower_bound, upper_bound
 
+class PathShadowPredictor(PredictionModel):
+    def __init__(self, lookback_window=60, n_neighbors=20):
+        self.lookback_window = lookback_window
+        self.n_neighbors = n_neighbors
+        self.prices = None
+        self.dates = None
+
+    def train(self, dates, prices):
+        self.dates = np.array(dates)
+        self.prices = np.array(prices)
+
+    def predict(self, future_dates, confidence_interval=0.95):
+        if self.prices is None or len(self.prices) < self.lookback_window:
+            # Fallback if not enough data: simple linear projection or just last price
+            # For simplicity, let's just return the last price flat
+            last_price = self.prices[-1] if self.prices is not None else 0
+            n = len(future_dates)
+            return np.full(n, last_price), np.full(n, last_price), np.full(n, last_price)
+
+        n_future = len(future_dates)
+        current_pattern = self.prices[-self.lookback_window:]
+        current_pattern_norm = current_pattern / current_pattern[0]
+
+        distances = []
+        
+        # We search through the history up to the point where we still have 'n_future' days after the window
+        # to use for projection.
+        # Valid start indices for historical windows:
+        # 0 to len(prices) - lookback_window - n_future
+        
+        max_start_idx = len(self.prices) - self.lookback_window - n_future
+        
+        if max_start_idx < 0:
+            # Not enough history to find a window AND a full future path
+            # Relax the constraint: we just need *some* future path, even if shorter?
+            # Or just limit the search space.
+            # If we can't find full paths, we might have to truncate.
+            # Let's fallback to linear regression or similar if truly not enough data.
+            # But here, let's just use what we have, maybe overlap?
+            # If data is really short, this model isn't suitable.
+            # Assuming we have enough data for at least 1 match.
+            return np.full(n_future, self.prices[-1]), np.full(n_future, self.prices[-1]), np.full(n_future, self.prices[-1])
+
+        # Optimize: sliding window view could be faster, but simple loop is fine for <5000 points
+        for i in range(max_start_idx + 1):
+            window = self.prices[i : i + self.lookback_window]
+            window_norm = window / window[0]
+            dist = np.linalg.norm(current_pattern_norm - window_norm)
+            distances.append((dist, i))
+        
+        # Find top k neighbors
+        distances.sort(key=lambda x: x[0])
+        neighbors = distances[:self.n_neighbors]
+        
+        future_paths = []
+        last_price = self.prices[-1]
+        
+        for _, idx in neighbors:
+            # Get the historical future prices
+            hist_future = self.prices[idx + self.lookback_window : idx + self.lookback_window + n_future]
+            
+            # Calculate returns relative to the end of that historical window
+            # future_factor = price[t+k] / price[t]
+            hist_end_price = self.prices[idx + self.lookback_window - 1]
+            factors = hist_future / hist_end_price
+            
+            # Apply to current price
+            proj_path = last_price * factors
+            future_paths.append(proj_path)
+            
+        future_paths = np.array(future_paths)
+        
+        # Aggregate
+        mean_pred = np.mean(future_paths, axis=0)
+        
+        # Quantiles for bounds
+        alpha = (1 - confidence_interval) / 2
+        lower_bound = np.quantile(future_paths, alpha, axis=0)
+        upper_bound = np.quantile(future_paths, 1 - alpha, axis=0)
+        
+        return mean_pred, lower_bound, upper_bound
+
 # Factory or Manager
 class SimulationBackend:
     def __init__(self):
         self.models = {
-            "Linear Regression": LinearRegressionPredictor
+            "Linear Regression": LinearRegressionPredictor,
+            "Path Shadow": PathShadowPredictor
         }
 
     def get_model(self, model_name):
