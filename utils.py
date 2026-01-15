@@ -12,7 +12,7 @@ def set_page_config(page_title='Stock Prices dashboard', page_icon=':chart_with_
     )
 
 @st.cache_data(ttl=60 * 60 * 24)
-def get_price_data(tickers, start_date, end_date):
+def get_price_data(tickers, start_date, end_date, interval='1d'):
     """Download historical Close prices for the requested tickers.
 
     Returns a DataFrame with columns: Date, Ticker, Price
@@ -21,10 +21,14 @@ def get_price_data(tickers, start_date, end_date):
     frames = []
     for ticker in tickers:
         try:
-            hist = yf.Ticker(ticker).history(start=start_date, end=end_date)
+            hist = yf.Ticker(ticker).history(start=start_date, end=end_date, interval=interval)
             if hist.empty:
                 continue
             df = hist[['Open', 'High', 'Low', 'Close']].reset_index()
+            # Normalize date column name (intraday often returns 'Datetime')
+            if 'Datetime' in df.columns:
+                df = df.rename(columns={'Datetime': 'Date'})
+            
             df = df.rename(columns={'Close': 'Price'})
             df['Ticker'] = ticker
             frames.append(df)
@@ -36,7 +40,13 @@ def get_price_data(tickers, start_date, end_date):
         return pd.DataFrame(columns=['Date', 'Ticker', 'Price'])
 
     result = pd.concat(frames, ignore_index=True)
-    result['Date'] = pd.to_datetime(result['Date']).dt.date
+    
+    # Only convert to date object if we are using daily interval to preserve time for intraday
+    if interval == '1d':
+        result['Date'] = pd.to_datetime(result['Date']).dt.date
+    else:
+        result['Date'] = pd.to_datetime(result['Date'])
+        
     return result
 
 # --- Ticker Mapping & Helper Functions ---

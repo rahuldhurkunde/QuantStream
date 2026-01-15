@@ -42,3 +42,37 @@ def test_get_price_data_empty(mock_ticker):
     assert df.empty
     assert 'Ticker' in df.columns
     assert 'Price' in df.columns
+
+@patch('utils.yf.Ticker')
+def test_get_price_data_intraday(mock_ticker):
+    # Setup mock return data for intraday (Datetime index)
+    mock_hist = pd.DataFrame({
+        'Open': [100, 102],
+        'High': [105, 106],
+        'Low': [99, 101],
+        'Close': [101, 105],
+    }, index=pd.to_datetime(['2023-01-01 09:30:00', '2023-01-01 09:45:00']))
+    mock_hist.index.name = 'Datetime' # yfinance usually returns Datetime for intraday
+    
+    mock_instance = MagicMock()
+    mock_instance.history.return_value = mock_hist
+    mock_ticker.return_value = mock_instance
+    
+    start = '2023-01-01'
+    end = '2023-01-02'
+    tickers = ['TEST_INTRA']
+    
+    # Call with intraday interval
+    df = get_price_data(tickers, start, end, interval='15m')
+    
+    assert not df.empty
+    assert 'Ticker' in df.columns
+    assert 'Price' in df.columns
+    assert df['Ticker'].iloc[0] == 'TEST_INTRA'
+    
+    # Check that Date column preserves time
+    first_date = df['Date'].iloc[0]
+    assert isinstance(first_date, pd.Timestamp)
+    assert first_date.hour == 9
+    assert first_date.minute == 30
+

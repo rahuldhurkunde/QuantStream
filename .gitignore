@@ -163,6 +163,17 @@ backend-testing/backtest_results.json
 # Models
 models/lasso_data.csv
 
+
+# Testing outputs
+data/github_tickers.json
+lasso_data.csv
+
+# swap files
+models/.lasso_analysis.py.swp
+.DS_Store
+.gitignore.swp
+
+
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
 #  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
