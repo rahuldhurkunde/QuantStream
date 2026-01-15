@@ -197,7 +197,7 @@ def fetch_data(limit=None):
 
     return pd.DataFrame(data_list)
 
-def run_lasso_analysis(df, alpha=0.1):
+def run_lasso_analysis(df, alpha=0.1, tol=0.001):
     """
     Performs LASSO regression on the dataframe.
     """
@@ -252,7 +252,7 @@ def run_lasso_analysis(df, alpha=0.1):
     X_train, X_test, y_train, y_test = train_test_split(X_scaled, y_valid, test_size=0.2, random_state=42)
     
     # LASSO Model
-    lasso = Lasso(alpha=alpha)
+    lasso = Lasso(alpha=alpha, tol=tol)
     lasso.fit(X_train, y_train)
     
     # Evaluate
@@ -286,6 +286,7 @@ def main():
     parser = argparse.ArgumentParser(description="Perform LASSO regression on ticker metrics.")
     parser.add_argument('--limit', type=int, default=100, help="Number of tickers to process (default: 100). Use 0 for all.")
     parser.add_argument('--alpha', type=float, default=0.01, help="Lasso regularization strength (default: 0.01).")
+    parser.add_argument('--tol', type=float, default=0.001, help="Lasso tolerance for optimization (default: 0.01).")
     parser.add_argument('--output', type=str, default='lasso_data.csv', help="Path to save the fetched data.")
     
     args = parser.parse_args()
