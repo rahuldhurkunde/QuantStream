@@ -1,8 +1,8 @@
 streamlit
 pandas
 watchdog
-# Added for fetching stock prices
 yfinance
+polygon-api-client
 plotly
 pytest
 scikit-learn
