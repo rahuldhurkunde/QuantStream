@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import yfinance as yf
+from polygon import RESTClient
 from datetime import date, timedelta
 import re
 
@@ -11,8 +12,47 @@ def set_page_config(page_title='Stock Prices dashboard', page_icon=':chart_with_
         page_icon=page_icon,
     )
 
+def get_polygon_data(ticker, start_date, end_date, api_key, interval='1d'):
+    """Fetch historical data using Polygon.io REST API."""
+    if not api_key:
+        return pd.DataFrame()
+    
+    try:
+        client = RESTClient(api_key=api_key)
+        # Convert intervals to Polygon format
+        multiplier = 1
+        timespan = 'day'
+        if interval == '1wk':
+            timespan = 'week'
+        elif interval == '1mo':
+            timespan = 'month'
+        
+        aggs = client.get_aggs(
+            ticker=ticker,
+            multiplier=multiplier,
+            timespan=timespan,
+            from_=start_date,
+            to=end_date
+        )
+        
+        data = []
+        for agg in aggs:
+            data.append({
+                'Date': pd.to_datetime(agg.timestamp, unit='ms'),
+                'Open': agg.open,
+                'High': agg.high,
+                'Low': agg.low,
+                'Price': agg.close, # Polygon uses 'close', we map to 'Price'
+                'Ticker': ticker
+            })
+            
+        return pd.DataFrame(data)
+    except Exception as e:
+        print(f"Error fetching Polygon data for {ticker}: {e}")
+        return pd.DataFrame()
+
 @st.cache_data(ttl=60 * 60 * 24)
-def get_price_data(tickers, start_date, end_date, interval='1d'):
+def get_price_data(tickers, start_date, end_date, interval='1d', source='yfinance', api_key=None):
     """Download historical Close prices for the requested tickers.
 
     Returns a DataFrame with columns: Date, Ticker, Price
@@ -21,17 +61,24 @@ def get_price_data(tickers, start_date, end_date, interval='1d'):
     frames = []
     for ticker in tickers:
         try:
-            hist = yf.Ticker(ticker).history(start=start_date, end=end_date, interval=interval)
-            if hist.empty:
-                continue
-            df = hist[['Open', 'High', 'Low', 'Close']].reset_index()
-            # Normalize date column name (intraday often returns 'Datetime')
-            if 'Datetime' in df.columns:
-                df = df.rename(columns={'Datetime': 'Date'})
-            
-            df = df.rename(columns={'Close': 'Price'})
-            df['Ticker'] = ticker
-            frames.append(df)
+            if source == 'polygon':
+                df = get_polygon_data(ticker, start_date, end_date, api_key, interval)
+                if df.empty:
+                    continue
+                frames.append(df)
+            else:
+                # Default to yfinance
+                hist = yf.Ticker(ticker).history(start=start_date, end=end_date, interval=interval)
+                if hist.empty:
+                    continue
+                df = hist[['Open', 'High', 'Low', 'Close']].reset_index()
+                # Normalize date column name (intraday often returns 'Datetime')
+                if 'Datetime' in df.columns:
+                    df = df.rename(columns={'Datetime': 'Date'})
+                
+                df = df.rename(columns={'Close': 'Price'})
+                df['Ticker'] = ticker
+                frames.append(df)
         except Exception:
             # don't break the whole app if one ticker fails
             continue

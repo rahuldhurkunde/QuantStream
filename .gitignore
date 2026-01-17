@@ -160,18 +160,15 @@ cython_debug/
 backend-testing/batched-run.sh
 backend-testing/backtest_results.json
 
-# Models
-models/lasso_data.csv
-
-
 # Testing outputs
 data/github_tickers.json
-lasso_data.csv
+models/lasso_data.csv
 
 # swap files
 models/.lasso_analysis.py.swp
 .DS_Store
 .gitignore.swp
+api_key.txt
 
 
 # PyCharm

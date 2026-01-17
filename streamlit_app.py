@@ -22,7 +22,7 @@ st.markdown("""
 
 ### _Light-weight financial dashboard built for the modern investor who demands speed and clarity_.  
 
-Browse historical stock prices using the `yfinance` API.
+Browse historical stock prices using the `yfinance` or `Polygon.io` API.
 """)
 
 #In case we want links to sub-pages on the main one. Use below
@@ -36,6 +36,12 @@ start_date, end_date = st.date_input(
     'Which date range are you interested in?',
     value=(one_year_ago, today),
 )
+
+# API Selection
+api_source = st.radio("Select Data Source", ["yfinance", "Polygon"], index=0, horizontal=True)
+api_key = None
+if api_source == "Polygon":
+    api_key = st.text_input("Enter Polygon API Key", type="password")
 
 # Offer a set of common tickers by default
 selected_tickers = st.multiselect(
@@ -62,10 +68,23 @@ if not final_tickers:
     st.warning("Select or enter at least one ticker to fetch prices")
 else:
     # Fetch price data (cached)
-    price_df = get_price_data(final_tickers, start_date.isoformat(), (end_date + timedelta(days=1)).isoformat())
+    if api_source == "Polygon" and not api_key:
+        st.error("Please enter a valid Polygon API Key.")
+        price_df = pd.DataFrame() # Empty DF to avoid errors downstream
+    else:
+        price_df = get_price_data(
+            final_tickers, 
+            start_date.isoformat(), 
+            (end_date + timedelta(days=1)).isoformat(),
+            source=api_source.lower(),
+            api_key=api_key
+        )
 
     if price_df.empty:
-        st.warning('No price data found for the selected tickers / dates.')
+        if api_source == "Polygon" and not api_key:
+             pass # Already showed error
+        else:
+             st.warning('No price data found for the selected tickers / dates.')
     else:
         # Pivot for plotting: index=Date, columns=Ticker
         pivot_df = price_df.pivot(index='Date', columns='Ticker', values='Price')
