@@ -14,64 +14,104 @@ DEBUG = '--debug' in sys.argv
 # Set the title and favicon that appear in the Browser's tab bar.
 set_page_config()
 
+# Initialize session state for API configuration
+if 'api_configured' not in st.session_state:
+    st.session_state['api_configured'] = False
+if 'api_source' not in st.session_state:
+    st.session_state['api_source'] = 'yfinance'
+if 'api_key' not in st.session_state:
+    st.session_state['api_key'] = None
+
 # -----------------------------------------------------------------------------
-# Draw the actual page (stock prices)
+# Landing Page Logic
 
-st.markdown("""
-# :chart_with_upwards_trend: QuantStream
+if not st.session_state['api_configured']:
+    st.markdown("""
+    # :chart_with_upwards_trend: QuantStream
 
-### _Light-weight financial dashboard built for the modern investor who demands speed and clarity_.  
+    ### _Light-weight financial dashboard built for the modern investor who demands speed and clarity_.  
+    """)
 
-Browse historical stock prices using the `yfinance` or `Polygon.io` API.
-""")
+    st.markdown("---")
+    
+    col_l, col_c, col_r = st.columns([1, 2, 1])
+    
+    with col_c:
+        st.subheader("Select your Data Source")
+        
+        selected_api = st.radio(
+            "Choose API:", 
+            ["yfinance", "Polygon"], 
+            horizontal=True,
+            label_visibility="collapsed"
+        )
+        
+        api_key_input = None
+        if selected_api == "Polygon":
+            api_key_input = st.text_input("Enter Polygon API Key", type="password")
+            
+        if st.button("Enter Dashboard", type="primary", use_container_width=True):
+            if selected_api == "Polygon" and not api_key_input:
+                st.error("Please enter a valid Polygon API Key.")
+            else:
+                st.session_state['api_source'] = selected_api
+                st.session_state['api_key'] = api_key_input
+                st.session_state['api_configured'] = True
+                st.rerun()
 
-#In case we want links to sub-pages on the main one. Use below
-#st.page_link("pages/in_depth_analysis.py", label="Go to In-depth Analysis", icon="🔬")
-
-# date range selectors
-today = date.today()
-one_year_ago = today - timedelta(days=365)
-
-start_date, end_date = st.date_input(
-    'Which date range are you interested in?',
-    value=(one_year_ago, today),
-)
-
-# API Selection
-api_source = st.radio("Select Data Source", ["yfinance", "Polygon"], index=0, horizontal=True)
-api_key = None
-if api_source == "Polygon":
-    api_key = st.text_input("Enter Polygon API Key", type="password")
-
-# Offer a set of common tickers by default
-selected_tickers = st.multiselect(
-    'Which tickers would you like to view?',
-    POPULAR_TICKERS_LIST,
-    ['Nvidia Corp (NVDA)', 'Amazon Com Inc (AMZN)']
-)
-
-# Allow the user to add custom tickers as a comma-separated list
-# custom_input = st.text_input('Add custom tickers (comma-separated)', '', help='Enter tickers like AAPL, TSLA, BABA')
-# custom_list = [t.strip().upper() for t in custom_input.split(',') if t.strip()]
-
-# Merge selected tickers with custom tickers, preserving order and removing duplicates
-final_tickers = []
-
-# Process selected list (extract symbols)
-cleaned_selected = [extract_ticker(t) for t in (selected_tickers or [])]
-
-for t in cleaned_selected:
-    if t and t not in final_tickers:
-        final_tickers.append(t)
-
-if not final_tickers:
-    st.warning("Select or enter at least one ticker to fetch prices")
 else:
-    # Fetch price data (cached)
-    if api_source == "Polygon" and not api_key:
-        st.error("Please enter a valid Polygon API Key.")
-        price_df = pd.DataFrame() # Empty DF to avoid errors downstream
+    # -----------------------------------------------------------------------------
+    # Main Dashboard Logic
+    
+    # Retrieve configuration
+    api_source = st.session_state['api_source']
+    api_key = st.session_state['api_key']
+
+    st.markdown(f"""
+    # :chart_with_upwards_trend: QuantStream
+
+    ### _Light-weight financial dashboard built for the modern investor who demands speed and clarity_.  
+
+    Using **{api_source}** API.
+    """)
+
+    #In case we want links to sub-pages on the main one. Use below
+    #st.page_link("pages/in_depth_analysis.py", label="Go to In-depth Analysis", icon="🔬")
+
+    # date range selectors
+    today = date.today()
+    one_year_ago = today - timedelta(days=365)
+
+    start_date, end_date = st.date_input(
+        'Which date range are you interested in?',
+        value=(one_year_ago, today),
+    )
+
+    # Offer a set of common tickers by default
+    selected_tickers = st.multiselect(
+        'Which tickers would you like to view?',
+        POPULAR_TICKERS_LIST,
+        ['Nvidia Corp (NVDA)', 'Amazon Com Inc (AMZN)']
+    )
+
+    # Allow the user to add custom tickers as a comma-separated list
+    # custom_input = st.text_input('Add custom tickers (comma-separated)', '', help='Enter tickers like AAPL, TSLA, BABA')
+    # custom_list = [t.strip().upper() for t in custom_input.split(',') if t.strip()]
+
+    # Merge selected tickers with custom tickers, preserving order and removing duplicates
+    final_tickers = []
+
+    # Process selected list (extract symbols)
+    cleaned_selected = [extract_ticker(t) for t in (selected_tickers or [])]
+
+    for t in cleaned_selected:
+        if t and t not in final_tickers:
+            final_tickers.append(t)
+
+    if not final_tickers:
+        st.warning("Select or enter at least one ticker to fetch prices")
     else:
+        # Fetch price data (cached)
         price_df = get_price_data(
             final_tickers, 
             start_date.isoformat(), 
@@ -80,152 +120,156 @@ else:
             api_key=api_key
         )
 
-    if price_df.empty:
-        if api_source == "Polygon" and not api_key:
-             pass # Already showed error
+        if price_df.empty:
+            st.warning('No price data found for the selected tickers / dates.')
         else:
-             st.warning('No price data found for the selected tickers / dates.')
-    else:
-        # Pivot for plotting: index=Date, columns=Ticker
-        pivot_df = price_df.pivot(index='Date', columns='Ticker', values='Price')
-        pivot_df = pivot_df.sort_index()
+            # Pivot for plotting: index=Date, columns=Ticker
+            pivot_df = price_df.pivot(index='Date', columns='Ticker', values='Price')
+            pivot_df = pivot_df.sort_index()
 
-        # Add selector for technical indicators
-        indicator_options = [
-            '52w High/Low',
-            'Moving Average (MA)',
-            'RSI (14)'
-        ]
+            # Add selector for technical indicators
+            indicator_options = [
+                '52w High/Low',
+                'Moving Average (MA)',
+                'RSI (14)'
+            ]
 
-        selected_indicators = st.multiselect(
-            'Overlay indicators on the chart',
-            indicator_options,
-            []
-        )
+            selected_indicators = st.multiselect(
+                'Overlay indicators on the chart',
+                indicator_options,
+                []
+            )
 
-        # If MA is selected, allow the user to pick a window
-        ma_periods = []
-        if any('Moving Average' in s for s in selected_indicators):
-            ma_input = st.text_input('Moving Average periods (days, comma-separated)', value='50')
-            try:
-                ma_periods = [int(p.strip()) for p in ma_input.split(',') if p.strip()]
-            except ValueError:
-                st.error("Invalid input for Moving Average periods. Please use integers separated by commas (e.g., '50, 200').")
+            # If MA is selected, allow the user to pick a window
+            ma_periods = []
+            if any('Moving Average' in s for s in selected_indicators):
+                ma_input = st.text_input('Moving Average periods (days, comma-separated)', value='50')
+                try:
+                    ma_periods = [int(p.strip()) for p in ma_input.split(',') if p.strip()]
+                except ValueError:
+                    st.error("Invalid input for Moving Average periods. Please use integers separated by commas (e.g., '50, 200').")
 
-        st.header('Prices over time', divider='gray')
+            st.header('Prices over time', divider='gray')
 
-        col_ctrl1, col_ctrl2 = st.columns([1, 4])
-        with col_ctrl1:
-             chart_type = st.radio("Chart Type", ["Line", "Candle"], horizontal=True)
-        with col_ctrl2:
-             log_scale = st.checkbox('Log Scale', value=False)
+            col_ctrl1, col_ctrl2 = st.columns([1, 4])
+            with col_ctrl1:
+                 chart_type = st.radio("Chart Type", ["Line", "Candle"], horizontal=True)
+            with col_ctrl2:
+                 log_scale = st.checkbox('Log Scale', value=False)
 
-        # Create a subplot figure with 2 rows if RSI is selected
-        rows = 2 if 'RSI (14)' in selected_indicators else 1
-        row_heights = [0.7, 0.3] if 'RSI (14)' in selected_indicators else [1]
-        fig = make_subplots(rows=rows, cols=1, shared_xaxes=True, vertical_spacing=0.05, row_heights=row_heights)
+            # Create a subplot figure with 2 rows if RSI is selected
+            rows = 2 if 'RSI (14)' in selected_indicators else 1
+            row_heights = [0.7, 0.3] if 'RSI (14)' in selected_indicators else [1]
+            fig = make_subplots(rows=rows, cols=1, shared_xaxes=True, vertical_spacing=0.05, row_heights=row_heights)
 
 
-        # Build a DataFrame to draw on the main price chart (price + MA + 52w)
-        plot_df = pivot_df.copy()
+            # Build a DataFrame to draw on the main price chart (price + MA + 52w)
+            plot_df = pivot_df.copy()
 
-        if 'Moving Average (MA)' in selected_indicators and ma_periods:
-            plot_df = add_moving_average(plot_df, ma_periods)
+            if 'Moving Average (MA)' in selected_indicators and ma_periods:
+                plot_df = add_moving_average(plot_df, ma_periods)
 
-        if '52w High/Low' in selected_indicators:
-            plot_df = add_52w_high_low(plot_df)
+            if '52w High/Low' in selected_indicators:
+                plot_df = add_52w_high_low(plot_df)
 
-        # Main Plot Logic
-        if chart_type == "Line":
-            for col in plot_df.columns:
-                fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df[col], name=col), row=1, col=1)
-        else:
-            # Candlestick Plot
-            # 1. Plot Candles for each ticker
-            for ticker in final_tickers:
-                # Filter price_df for this ticker
-                ticker_data = price_df[price_df['Ticker'] == ticker]
-                if not ticker_data.empty:
-                    fig.add_trace(go.Candlestick(
-                        x=ticker_data['Date'],
-                        open=ticker_data['Open'],
-                        high=ticker_data['High'],
-                        low=ticker_data['Low'],
-                        close=ticker_data['Price'],
-                        name=ticker
-                    ), row=1, col=1)
-            
-            # 2. Plot Indicators (MAs, etc.) - exclude the raw Ticker columns since we drew candles
-            # Raw ticker columns match 'final_tickers'
-            for col in plot_df.columns:
-                if col not in final_tickers:
+            # Main Plot Logic
+            if chart_type == "Line":
+                for col in plot_df.columns:
                     fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df[col], name=col), row=1, col=1)
+            else:
+                # Candlestick Plot
+                # 1. Plot Candles for each ticker
+                for ticker in final_tickers:
+                    # Filter price_df for this ticker
+                    ticker_data = price_df[price_df['Ticker'] == ticker]
+                    if not ticker_data.empty:
+                        fig.add_trace(go.Candlestick(
+                            x=ticker_data['Date'],
+                            open=ticker_data['Open'],
+                            high=ticker_data['High'],
+                            low=ticker_data['Low'],
+                            close=ticker_data['Price'],
+                            name=ticker
+                        ), row=1, col=1)
+                
+                # 2. Plot Indicators (MAs, etc.) - exclude the raw Ticker columns since we drew candles
+                # Raw ticker columns match 'final_tickers'
+                for col in plot_df.columns:
+                    if col not in final_tickers:
+                        fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df[col], name=col), row=1, col=1)
+                
+                fig.update_layout(xaxis_rangeslider_visible=False)
+
+            # If RSI is selected, show a separate chart below.
+            if 'RSI (14)' in selected_indicators:
+                rsi_df = calculate_rsi(pivot_df)
+                if not rsi_df.empty:
+                    for col in rsi_df.columns:
+                        fig.add_trace(go.Scatter(x=rsi_df.index, y=rsi_df[col], name=f'{col} RSI'), row=2, col=1)
+                    fig.update_yaxes(title_text="RSI", row=2, col=1)
+
+
+            fig.update_layout(
+                height=500,
+                title_text="Stock Prices"
+            )
             
-            fig.update_layout(xaxis_rangeslider_visible=False)
+            if log_scale:
+                fig.update_yaxes(type='log', row=1, col=1)
+            st.plotly_chart(fig, width='stretch')
 
-        # If RSI is selected, show a separate chart below.
-        if 'RSI (14)' in selected_indicators:
-            rsi_df = calculate_rsi(pivot_df)
-            if not rsi_df.empty:
-                for col in rsi_df.columns:
-                    fig.add_trace(go.Scatter(x=rsi_df.index, y=rsi_df[col], name=f'{col} RSI'), row=2, col=1)
-                fig.update_yaxes(title_text="RSI", row=2, col=1)
+            st.header(f'Prices at end of range ({end_date.isoformat()})', divider='gray')
 
+            cols = st.columns(4)
 
-        fig.update_layout(
-            height=500,
-            title_text="Stock Prices"
-        )
-        
-        if log_scale:
-            fig.update_yaxes(type='log', row=1, col=1)
-        st.plotly_chart(fig, width='stretch')
+            for i, ticker in enumerate(final_tickers):
+                col = cols[i % len(cols)]
 
-        st.header(f'Prices at end of range ({end_date.isoformat()})', divider='gray')
+                with col:
+                    if ticker not in pivot_df.columns or pivot_df[ticker].dropna().empty:
+                        st.metric(label=f'{ticker} Price', value='n/a', delta='n/a', delta_color='off')
+                        continue
 
-        cols = st.columns(4)
+                    series = pivot_df[ticker].dropna()
+                    first_price = series.iloc[0]
+                    last_price = series.iloc[-1]
 
-        for i, ticker in enumerate(final_tickers):
-            col = cols[i % len(cols)]
+                    if pd.isna(first_price) or first_price == 0:
+                        growth = 'n/a'
+                        delta_color = 'off'
+                    else:
+                        pct_change = (last_price - first_price) / first_price * 100
+                        growth = f'{pct_change:+.2f}%'
+                        delta_color = 'normal'
 
-            with col:
-                if ticker not in pivot_df.columns or pivot_df[ticker].dropna().empty:
-                    st.metric(label=f'{ticker} Price', value='n/a', delta='n/a', delta_color='off')
-                    continue
+                    st.metric(
+                        label=f'{ticker} Price',
+                        value=f'${last_price:,.2f}',
+                        delta=growth,
+                        delta_color=delta_color,
+                    )
 
-                series = pivot_df[ticker].dropna()
-                first_price = series.iloc[0]
-                last_price = series.iloc[-1]
+            st.header('News Headlines', divider='gray')
 
-                if pd.isna(first_price) or first_price == 0:
-                    growth = 'n/a'
-                    delta_color = 'off'
-                else:
-                    pct_change = (last_price - first_price) / first_price * 100
-                    growth = f'{pct_change:+.2f}%'
-                    delta_color = 'normal'
+            news_ticker = st.selectbox('Select ticker for news', final_tickers)
+            if DEBUG:
+                st.write(f"Selected ticker for news: {news_ticker}")
 
-                st.metric(
-                    label=f'{ticker} Price',
-                    value=f'${last_price:,.2f}',
-                    delta=growth,
-                    delta_color=delta_color,
-                )
-
-        st.header('News Headlines', divider='gray')
-
-        news_ticker = st.selectbox('Select ticker for news', final_tickers)
-        if DEBUG:
-            st.write(f"Selected ticker for news: {news_ticker}")
-
-        if st.button('Get News'):
-            if news_ticker:
-                news = get_news(news_ticker)
-                if DEBUG:
-                    st.write("Fetched news data:", news)
-                if news:
-                    for article in news:
-                        st.markdown(f"**{article['headline']}** ({article['publisher']})")
-                        st.markdown(f"[Read more]({article['link']})")
-                else:
-                    st.write(f"No news found for {news_ticker}")
+            if st.button('Get News'):
+                if news_ticker:
+                    news = get_news(
+                        news_ticker,
+                        source=api_source.lower(),
+                        api_key=api_key
+                    )
+                    if DEBUG:
+                        st.write("Fetched news data:", news)
+                    if news:
+                        for article in news:
+                            # Handle different date formats or missing fields if needed
+                            pub_date = article.get('published_utc', '')
+                            date_str = f" - {pub_date}" if pub_date else ""
+                            st.markdown(f"**{article['headline']}** ({article['publisher']}{date_str})")
+                            st.markdown(f"[Read more]({article['link']})")
+                    else:
+                        st.write(f"No news found for {news_ticker}")

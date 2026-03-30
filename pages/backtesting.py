@@ -10,6 +10,12 @@ st.set_page_config(page_title="Backtesting", page_icon="📈")
 
 st.title("Stock Backtesting")
 
+# API Configuration (from Session State)
+api_source = st.session_state.get('api_source', 'yfinance')
+api_key = st.session_state.get('api_key', None)
+
+st.markdown(f"Using **{api_source}** API.")
+
 st.markdown("""
 ### This tool allows you to backtest stock performance and prediction models.
 
@@ -21,6 +27,13 @@ st.markdown("""
 
 # --- Sidebar Inputs ---
 st.sidebar.header("Configuration")
+
+# API Configuration (from Session State)
+api_source = st.session_state.get('api_source', 'yfinance')
+api_key = st.session_state.get('api_key', None)
+
+if api_source == 'Polygon' and not api_key:
+    st.warning("Polygon API selected but no key found. Please configure on the main page.")
 
 # Ticker Input
 # Use selectbox for easy search, plus an option for custom entry
@@ -86,7 +99,13 @@ if st.sidebar.button("Run Backtest"):
             # We need to handle the case where prediction_end_date is in the future relative to Today.
             # yfinance will just return up to Today.
             
-            df_all = utils.get_price_data([ticker], start_date, fetch_end_date + timedelta(days=5))
+            df_all = utils.get_price_data(
+                [ticker], 
+                start_date, 
+                fetch_end_date + timedelta(days=5),
+                source=api_source.lower(),
+                api_key=api_key
+            )
             
             if df_all.empty:
                 st.error(f"No data found for {ticker} in the given range.")

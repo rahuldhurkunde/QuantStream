@@ -4,12 +4,12 @@ import yfinance as yf
 import plotly.graph_objects as go
 import sys
 import os
-from datetime import datetime
+from datetime import datetime, date, timedelta
 
 # Add the parent directory to sys.path so we can import utils
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from utils import set_page_config, POPULAR_TICKERS_LIST, extract_ticker
+from utils import set_page_config, POPULAR_TICKERS_LIST, extract_ticker, get_price_data
 from indicators import calculate_rsi
 
 # Set the page config
@@ -38,7 +38,11 @@ def get_change(current, old):
         return None
     return (current - old) / old
 
+# API Configuration (from Session State)
+api_source = st.session_state.get('api_source', 'yfinance')
+
 st.markdown("# :microscope: In-depth Analysis")
+st.markdown(f"Using **{api_source}** API.")
 
 # 1. Ticker Input
 # Use selectbox for easy search, plus an option for custom entry
@@ -61,12 +65,35 @@ else:
 if ticker:
     stock = yf.Ticker(ticker)
     
+    # API Key (from Session State)
+    api_key = st.session_state.get('api_key', None)
+
     # 2. Fetch History
     with st.spinner(f"Loading data for {ticker}..."):
         # Fetch max history for the chart and calculations
-        hist = stock.history(period="max")
+        # Using a reasonably long history (e.g. from 2000)
+        start_hist = '2000-01-01'
+        end_hist = (date.today() + timedelta(days=1)).isoformat()
         
-        # Fetch info for fundamental data
+        hist_df = get_price_data(
+            [ticker], 
+            start_hist, 
+            end_hist, 
+            source=api_source.lower(), 
+            api_key=api_key
+        )
+        
+        # Process hist_df to match expected format (Index=Date, Columns=Open, High, Low, Close)
+        if not hist_df.empty:
+            hist_df['Date'] = pd.to_datetime(hist_df['Date'])
+            hist = hist_df.set_index('Date').sort_index()
+            # Rename 'Price' to 'Close' for compatibility with existing code
+            if 'Price' in hist.columns:
+                hist = hist.rename(columns={'Price': 'Close'})
+        else:
+            hist = pd.DataFrame()
+        
+        # Fetch info for fundamental data (Always use yfinance for rich metadata for now)
         info = stock.info
 
     if hist.empty:

@@ -9,7 +9,12 @@ from tickers import POPULAR_TICKERS_LIST
 
 st.set_page_config(page_title="Ticker Correlation", page_icon="📈")
 
+# API Configuration (from Session State)
+api_source = st.session_state.get('api_source', 'yfinance')
+api_key = st.session_state.get('api_key', None)
+
 st.markdown("# 🔗 Ticker Correlation Analysis")
+st.markdown(f"Using **{api_source}** API.")
 st.markdown("Select two tickers to analyze their correlation via convolution over different time periods.")
 
 # Ticker Selection
@@ -65,7 +70,14 @@ if ticker1 and ticker2:
     # Fetch with a slight buffer to ensure we get enough data points if weekends are involved
     # but utils.get_price_data handles dates pretty well.
     # Pass interval to get_price_data
-    df = get_price_data([ticker1, ticker2], start_date.isoformat(), (end_date + timedelta(days=1)).isoformat(), interval=interval)
+    df = get_price_data(
+        [ticker1, ticker2], 
+        start_date.isoformat(), 
+        (end_date + timedelta(days=1)).isoformat(), 
+        interval=interval,
+        source=api_source.lower(),
+        api_key=api_key
+    )
 
     if df.empty:
         st.warning("No data found for the selected range.")
